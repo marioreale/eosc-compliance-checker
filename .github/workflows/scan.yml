@@ -21,6 +21,15 @@ on:
         required: false
         default: ""
 
+# The default GITHUB_TOKEN is read-only on this repo, so the test reporter could
+# not create its check run ("Resource not accessible by integration"). It needs
+# checks: write to publish the results table, and pull-requests: write to
+# annotate a PR diff.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
