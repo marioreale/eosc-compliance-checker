@@ -9,6 +9,35 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+# Links worth spending a HEAD request on. Every page of a real institutional
+# site repeats the whole site navigation, so probing every link found means
+# probing the entire organisation's link graph -- hundreds of requests, of which
+# the rules consult a handful. These patterns cover the artefacts the rule pack
+# actually asks about: policies, contact routes, catalogues and login endpoints.
+#
+# This is config rather than something derived from the rule set on purpose:
+# collection must not depend on which rules exist, or the evidence bundle stops
+# being re-evaluatable against a future rule pack.
+DEFAULT_LIVENESS_PATTERNS = [
+    r"(?i)polic",
+    r"(?i)privacy",
+    r"(?i)terms",
+    r"(?i)\baup\b",
+    r"(?i)acceptable",
+    r"(?i)conduct",
+    r"(?i)legal",
+    r"(?i)contact",
+    r"(?i)support",
+    r"(?i)helpdesk",
+    r"(?i)catalog",
+    r"(?i)marketplace",
+    r"(?i)servic",
+    r"(?i)login",
+    r"(?i)signin",
+    r"(?i)auth",
+    r"(?i)aai",
+]
+
 
 class CrawlConfig(BaseModel):
     max_depth: int = 1
@@ -17,6 +46,11 @@ class CrawlConfig(BaseModel):
     exclude: list[str] = Field(default_factory=lambda: [r"\.pdf$", r"\.zip$", r"/search"])
     respect_robots: bool = True
     check_link_liveness: bool = True
+    liveness_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_LIVENESS_PATTERNS))
+    # A hard ceiling so a pathological target cannot issue unbounded requests.
+    # Anything dropped by this ceiling is recorded in the bundle rather than
+    # silently assumed reachable.
+    max_liveness_probes: int = 300
 
 
 class Exemption(BaseModel):

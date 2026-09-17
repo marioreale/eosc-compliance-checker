@@ -78,6 +78,13 @@ def _eval_predicate(ctx: CheckContext, page, spec: dict[str, Any]) -> tuple[bool
                     extra={
                         "href": h.href,
                         "status": ctx.evidence.link_liveness.get(h.href),
+                        # Make an unverified link visible in the report rather
+                        # than letting "assumed live" read as "checked and live".
+                        "liveness": (
+                            "verified"
+                            if ctx.link_liveness_verified(h.href)
+                            else "not probed (assumed reachable)"
+                        ),
                         **({"note": note} if note else {}),
                     },
                 )

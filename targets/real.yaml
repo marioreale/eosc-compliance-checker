@@ -1,0 +1,49 @@
+# Real candidate-node targets.
+#
+# Kept separate from targets/targets.yaml so the fixture registry that the
+# end-to-end test depends on stays untouched, and so a real scan is always an
+# explicit act: `checker run -t targets/real.yaml`.
+#
+# Politeness for every entry here: robots.txt is respected, the crawl is
+# shallow and scoped, and collect.py leaves a 1s gap between requests to the
+# same host with an honest User-Agent carrying a contact URL.
+
+schema_version: 1
+
+targets:
+  - id: bbmri-eric
+    name: BBMRI-ERIC (thematic candidate EOSC Node)
+    type: node_landing_page
+    landing_page: https://www.bbmri-eric.eu/eosc-node-bbmri-eric/
+    crawl:
+      max_depth: 1
+
+      # `max_pages` is the wrong knob for this target and raising it did not
+      # help. The node page sits on the host that carries the whole of
+      # BBMRI-ERIC, so its depth-1 link set is the entire organisation's
+      # navigation. A 12-page budget truncated before reaching the page that
+      # publishes the AUP; raising it to 40 still truncated, with 23 links
+      # queued, and took nearly ten minutes.
+      #
+      # `include` bounds the crawl by relevance instead of by count: visit only
+      # the pages the landing-page rules actually ask questions about.
+      include:
+        - /privacy
+        - /legalnotice
+        - /contact
+        - /services
+        - /it/
+        - /faq
+      max_pages: 15
+
+      respect_robots: true
+      check_link_liveness: true
+      exclude:
+        - \.pdf$
+        - \.zip$
+        - /search
+        # Language-switcher permutations and news archives inflate the crawl
+        # without adding evidence about the landing page.
+        - /news/
+        - /events/
+        - \?

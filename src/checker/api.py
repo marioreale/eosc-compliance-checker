@@ -61,6 +61,17 @@ class CheckContext:
         status = self.evidence.link_liveness.get(href)
         return status is None or 200 <= status < 400
 
+    def link_liveness_verified(self, href: str) -> bool:
+        """True only if this link was actually probed.
+
+        `link_is_live` deliberately returns True for links it knows nothing
+        about, so that a gap in collection never becomes an accusation. The cost
+        is that "live" conflates *verified reachable* with *never checked*. A rule
+        asserting reachability needs to tell those apart, otherwise it reports
+        confident PASSes it has not earned.
+        """
+        return href in self.evidence.link_liveness
+
     def match_controls(
         self, page: PageEvidence, patterns: Iterable[str]
     ) -> list[UiElement]:
