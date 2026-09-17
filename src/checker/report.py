@@ -39,6 +39,9 @@ HTML_TEMPLATE = """<!doctype html>
  .v{font-weight:600;white-space:nowrap}
  .rem{color:#57606a;font-size:.85rem;margin-top:.3rem}
  .dg{color:#8250df;font-size:.8rem;margin-top:.2rem}
+ /* An unassessed run must never be mistakable for a clean one. */
+ .untrusted{border:2px solid #cf222e;background:#fff5f5;color:#82071e;
+            padding:.75rem .9rem;border-radius:6px;margin:1rem 0;font-size:.9rem}
  details{margin-top:.35rem} summary{cursor:pointer;font-size:.8rem;color:#57606a}
  pre{background:#f6f8fa;padding:.5rem;border-radius:6px;overflow-x:auto;font-size:.75rem;
      white-space:pre-wrap;word-break:break-all;margin:.3rem 0 0}
@@ -53,6 +56,22 @@ HTML_TEMPLATE = """<!doctype html>
  <span class="pill" style="background:{{ colours[verdict] }}">{{ verdict|replace('_',' ') }}: {{ n }}</span>
 {% endfor %}
 </div>
+
+{% if not report.is_trustworthy() %}
+<div class="untrusted">
+ <strong>This report is not a compliance statement.</strong>
+ {% if report.skipped_targets %}
+ Evidence was collected for
+ {% for t in report.skipped_targets %}<code>{{ t }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+ but no registry entry defines their declarations and exemptions, so no rule was
+ evaluated against them. An absence of failures below says nothing about these
+ targets. Re-run <code>evaluate</code> with the <code>--targets</code> file that
+ contains them.
+ {% else %}
+ It contains no findings at all: nothing was assessed.
+ {% endif %}
+</div>
+{% endif %}
 
 {% if report.blocking_failures() %}
 <h2>Blocking failures ({{ report.blocking_failures()|length }})</h2>
@@ -128,6 +147,24 @@ def write_markdown(report: RunReport, path: Path) -> Path:
     for verdict, n in report.counts().items():
         if n:
             lines.append(f"| {verdict.replace('_', ' ')} | {n} |")
+
+    if not report.is_trustworthy():
+        detail = (
+            "Evidence was collected for "
+            + ", ".join(f"`{t}`" for t in report.skipped_targets)
+            + " but no registry entry defines their declarations and exemptions, so no "
+            "rule was evaluated against them. An absence of failures below says nothing "
+            "about these targets."
+            if report.skipped_targets
+            else "It contains no findings at all: nothing was assessed."
+        )
+        lines += [
+            "",
+            "> **This report is not a compliance statement.**",
+            ">",
+            f"> {detail}",
+        ]
+
     lines += ["", "## Findings", "", "| Target | Rule | Verdict | Message |", "|---|---|---|---|"]
     for f in report.findings:
         msg = f.message.replace("|", "\\|")[:180]

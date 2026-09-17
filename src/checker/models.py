@@ -123,6 +123,20 @@ class EvidenceBundle(BaseModel):
     catalogue_services: list[dict[str, Any]] = Field(default_factory=list)
     declarations: dict[str, Any] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+    # True when the crawl stopped because it hit max_pages while links were still
+    # queued. Any rule whose adverse verdict rests on absence ("no X found
+    # anywhere") is unsound on a truncated bundle: the page holding X may simply
+    # never have been visited. Rules must consult this before claiming absence.
+    crawl_truncated: bool = False
+    unvisited_count: int = 0
+    # Links that were never HEAD-probed, because they did not match the target's
+    # liveness_patterns or fell outside max_liveness_probes. `link_is_live`
+    # treats an unprobed link as live so we never invent a failure, which means
+    # a rule asserting reachability MUST be able to see that the check did not
+    # actually happen. Recording it is the difference between "verified live" and
+    # "assumed live".
+    liveness_unprobed: list[str] = Field(default_factory=list)
+    liveness_probe_capped: bool = False
 
     @property
     def entry_page(self) -> PageEvidence | None:
@@ -174,6 +188,12 @@ class RunReport(BaseModel):
     finished_at: datetime | None = None
     rules_evaluated: list[str] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
+    # Evidence bundles that were collected but could NOT be evaluated, because no
+    # registry entry defines their declarations and exemptions. This must be
+    # carried into the report: a run that silently evaluated nothing and reported
+    # zero failures is indistinguishable from a clean run, which is the most
+    # dangerous possible failure mode for a compliance tool.
+    skipped_targets: list[str] = Field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
         out = {v.value: 0 for v in Verdict}
@@ -188,6 +208,14 @@ class RunReport(BaseModel):
             for f in self.findings
             if f.verdict == Verdict.FAIL and f.severity == Severity.MANDATORY
         ]
+
+    def is_trustworthy(self) -> bool:
+        """False when the run cannot be read as a compliance statement.
+
+        Zero findings does not mean compliant; it means nothing was assessed.
+        Callers must refuse to present such a run as a result.
+        """
+        return not self.skipped_targets and bool(self.findings)
 
     def by_target(self) -> dict[str, list[Finding]]:
         out: dict[str, list[Finding]] = {}

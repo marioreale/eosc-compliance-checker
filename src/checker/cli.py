@@ -103,7 +103,12 @@ def evaluate(
     for bundle in store.load_run(evidence_root, rid):
         target = registry.get(bundle.target_id)
         if target is None:
-            console.print(f"[yellow]skipping {bundle.target_id}: not in registry[/]")
+            run.skipped_targets.append(bundle.target_id)
+            console.print(
+                f"[red]cannot evaluate {bundle.target_id}: no entry in {targets}[/]\n"
+                "  Rules need the registry for declarations and exemptions, so this\n"
+                "  bundle is NOT assessed. Did you collect with a different -t file?"
+            )
             continue
         run.findings.extend(evaluate_bundle(target, bundle, only=only, today=None))
 
@@ -111,6 +116,23 @@ def evaluate(
     path = reporting.write_json(run, findings_dir / f"{rid}.json")
     _print_summary(run)
     console.print(f"\n[green]findings:[/] {path}")
+
+    # Refuse to let an unassessed run look like a clean one. Zero findings and
+    # zero failures is exactly what a fully compliant run looks like, so this
+    # has to be loud and it has to be a non-zero exit.
+    if not run.is_trustworthy():
+        if run.skipped_targets:
+            console.print(
+                f"\n[bold red]{len(run.skipped_targets)} target(s) collected but not "
+                f"evaluated:[/] {', '.join(run.skipped_targets)}\n"
+                "[bold red]This run is NOT a compliance statement.[/]"
+            )
+        else:
+            console.print(
+                "\n[bold red]No findings produced. Nothing was assessed; this run is "
+                "NOT a compliance statement.[/]"
+            )
+        raise typer.Exit(2)
 
 
 @app.command()
@@ -132,6 +154,18 @@ def report(
     md = reporting.write_markdown(run, out_dir / f"{rid}.md")
     _print_summary(run)
     console.print(f"\n[green]html:[/] {html}\n[green]markdown:[/] {md}")
+
+    if not run.is_trustworthy():
+        console.print(
+            "\n[bold red]This report is not a compliance statement:[/] "
+            + (
+                f"{len(run.skipped_targets)} target(s) were collected but never "
+                f"evaluated ({', '.join(run.skipped_targets)})."
+                if run.skipped_targets
+                else "it contains no findings at all."
+            )
+        )
+        raise typer.Exit(2)
 
     blocking = run.blocking_failures()
     if blocking and fail_on_mandatory:
