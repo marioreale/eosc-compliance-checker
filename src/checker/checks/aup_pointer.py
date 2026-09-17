@@ -18,6 +18,13 @@ AUP_PATTERNS = [
     r"(?i)\brules\s+of\s+participation\b",
     r"(?i)\bacceptable[-_]use\b",
     r"(?i)/aup\b",
+    # European research infrastructures very often publish this artefact as an
+    # "Access Policy" rather than an "Acceptable Use Policy" (BBMRI-ERIC, and
+    # most ERICs, do exactly this). Matching the label is still a heuristic --
+    # see README known limitations -- but omitting it produced a false FAIL
+    # against a node that does publish a conforming AUP.
+    r"(?i)\baccess\s+polic",
+    r"(?i)\bconditions\s+of\s+(use|access)\b",
 ]
 
 # Fields a catalogue record might use to carry the policy URL directly.
@@ -188,6 +195,35 @@ def _node_level_aup(ctx: CheckContext) -> Finding:
                     for h in hits[:3]
                 ],
             )
+    # Absence is only meaningful if we actually finished looking. On a truncated
+    # crawl the AUP may sit on a page we never opened -- which is exactly what
+    # happened on the first real run against BBMRI-ERIC, whose AUP is linked from
+    # an "Access Policies" page that fell outside the 12-page budget.
+    if ctx.evidence.crawl_truncated:
+        return ctx.finding(
+            Verdict.MANUAL_REVIEW,
+            message=(
+                "No acceptable use policy found on the "
+                f"{len(ctx.pages())} page(s) collected, but the crawl was truncated "
+                f"with {ctx.evidence.unvisited_count} link(s) unvisited, so absence "
+                "cannot be concluded."
+            ),
+            remediation=(
+                "Raise crawl.max_pages for this target, or point catalogue_api at the "
+                "node catalogue, then re-run."
+            ),
+            evidence=[
+                Evidence(
+                    url=ctx.target.landing_page,
+                    extra={
+                        "pages_examined": len(ctx.pages()),
+                        "unvisited": ctx.evidence.unvisited_count,
+                        "crawl_truncated": True,
+                    },
+                )
+            ],
+        )
+
     return ctx.finding(
         Verdict.FAIL,
         message="No acceptable use policy reference found anywhere on the collected pages.",

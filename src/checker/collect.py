@@ -19,7 +19,7 @@ import httpx
 
 from . import extract
 from .models import EvidenceBundle, PageEvidence, utcnow
-from .registry import Target
+from .registry import CrawlConfig, Target
 
 USER_AGENT = (
     "EOSC-ComplianceChecker/0.1 (+https://example.org/compliance-checker; "
@@ -31,6 +31,15 @@ USER_AGENT = (
 PER_HOST_DELAY_S = 1.0
 NAV_TIMEOUT_MS = 30_000
 SETTLE_MS = 800
+
+# Real institutional sites carry cookie-consent banners, analytics and chat
+# widgets that keep connections open indefinitely, so `networkidle` frequently
+# never fires and every page pays this timeout in full. On the first real run
+# against BBMRI-ERIC that cost ~5s x 40 pages with nothing to show for it: these
+# rules read server-rendered markup, which is already present at
+# `domcontentloaded`. Keep the wait short -- it is an optimisation for pages that
+# genuinely settle fast, not a correctness requirement.
+NETWORKIDLE_TIMEOUT_MS = 1_500
 BLOCKED_RESOURCES = {"image", "media", "font"}
 
 
@@ -83,7 +92,7 @@ async def _capture_page(page, url: str, depth: int) -> PageEvidence:
         # Analytics and chat widgets mean many real sites never reach networkidle.
         # Give it a bounded chance, then take whatever has rendered.
         with contextlib.suppress(Exception):
-            await page.wait_for_load_state("networkidle", timeout=5_000)
+            await page.wait_for_load_state("networkidle", timeout=NETWORKIDLE_TIMEOUT_MS)
         await page.wait_for_timeout(SETTLE_MS)
 
         html = await page.content()
@@ -180,11 +189,25 @@ async def collect_target(
 
             await asyncio.sleep(PER_HOST_DELAY_S)
 
+        # Record honestly whether we ran out of budget with work still queued.
+        # Without this, a rule cannot tell "this node publishes no AUP" from
+        # "we never opened the page the AUP is on", and it will happily assert
+        # the former. That is a false accusation against a node operator.
+        remaining = [u for u, _ in queue if u not in seen]
+        if remaining:
+            bundle.crawl_truncated = True
+            bundle.unvisited_count = len(remaining)
+            bundle.notes.append(
+                f"crawl hit max_pages={target.crawl.max_pages} with "
+                f"{len(remaining)} link(s) still unvisited; "
+                "absence-based verdicts on this bundle are not sound"
+            )
+
         await context.close()
         await browser.close()
 
         if target.crawl.check_link_liveness:
-            bundle.link_liveness = await _probe_links(bundle, client)
+            bundle.link_liveness = await _probe_links(bundle, client, target.crawl)
 
         if target.catalogue_api:
             bundle.catalogue_services = await _fetch_catalogue(target.catalogue_api, client)
@@ -192,13 +215,51 @@ async def collect_target(
     return bundle
 
 
-async def _probe_links(bundle: EvidenceBundle, client: httpx.AsyncClient) -> dict[str, int]:
-    """HEAD-probe outbound links so rules can distinguish 'linked' from 'reachable'."""
-    candidates: set[str] = set()
+async def _probe_links(
+    bundle: EvidenceBundle, client: httpx.AsyncClient, crawl: CrawlConfig
+) -> dict[str, int]:
+    """HEAD-probe the links rules might assert on, and record what we skipped.
+
+    Probing every link found is the wrong default. Every page of a real
+    institutional site repeats the entire site navigation, so a 40-page crawl of
+    BBMRI-ERIC yielded 359 distinct URLs -- the organisation's whole link graph --
+    while the rule pack consults a handful of policy, contact and catalogue
+    links. That cost roughly two and a half minutes per run for no added evidence.
+
+    Equally important: the previous implementation silently truncated the
+    candidate list to the first 200 URLs in sort order. Because `link_is_live`
+    treats an unknown link as live so as never to invent a failure, those dropped
+    links were then *assumed reachable*. A rule with `require_live: true` could
+    therefore PASS on a dead link purely because of where it sorted. Anything not
+    probed is now recorded on the bundle.
+    """
+    compiled = [re.compile(p) for p in crawl.liveness_patterns]
+
+    all_links: set[str] = set()
     for page in bundle.page_list():
         for link in page.links:
             if link.href.startswith("http"):
-                candidates.add(link.href)
+                all_links.add(link.href)
+
+    def relevant(url: str) -> bool:
+        # No patterns configured means "probe everything", preserving the old
+        # behaviour for anyone who wants it.
+        return not compiled or any(rx.search(url) for rx in compiled)
+
+    candidates = sorted(u for u in all_links if relevant(u))
+    skipped = sorted(all_links - set(candidates))
+
+    if len(candidates) > crawl.max_liveness_probes:
+        bundle.liveness_probe_capped = True
+        skipped.extend(candidates[crawl.max_liveness_probes :])
+        candidates = candidates[: crawl.max_liveness_probes]
+        bundle.notes.append(
+            f"liveness probing capped at max_liveness_probes="
+            f"{crawl.max_liveness_probes}; {len(skipped)} link(s) unverified"
+        )
+
+    bundle.liveness_unprobed = sorted(skipped)
+
     results: dict[str, int] = {}
     sem = asyncio.Semaphore(4)
 
@@ -213,7 +274,7 @@ async def _probe_links(bundle: EvidenceBundle, client: httpx.AsyncClient) -> dic
                 results[url] = 0
             await asyncio.sleep(0.2)
 
-    await asyncio.gather(*(probe(u) for u in sorted(candidates)[:200]))
+    await asyncio.gather(*(probe(u) for u in candidates))
     return results
 
 
