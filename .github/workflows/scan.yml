@@ -20,6 +20,18 @@ on:
         description: Comma-separated target ids (blank = all enabled)
         required: false
         default: ""
+      run_scan:
+        description: >-
+          Also run the scan against real targets. Leave unchecked to run only the
+          test suite -- a scan reaches out to other institutions' web servers, so
+          it should be a deliberate choice, not a side effect of asking for tests.
+        type: boolean
+        required: false
+        default: false
+      targets:
+        description: Registry file to scan (only used when run_scan is checked)
+        required: false
+        default: targets/real.yaml
 
 # The default GITHUB_TOKEN is read-only on this repo, so the test reporter could
 # not create its check run ("Resource not accessible by integration"). It needs
@@ -86,7 +98,11 @@ jobs:
 
   scan:
     name: nightly scan
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # A manual dispatch used to drag this job along with it, which meant asking
+    # for a test run also meant hitting third-party infrastructure.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_scan)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -114,7 +130,12 @@ jobs:
         run: |
           RUN_ID="$(date -u +%Y-%m-%d)-${GITHUB_RUN_NUMBER}"
           echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
-          uv run checker collect --run "${RUN_ID}" --only "${{ inputs.only }}"
+          # targets/targets.yaml holds only 127.0.0.1:8009 fixture URLs and this
+          # job starts no fixture server, so scanning it would collect nothing but
+          # connection errors. Real scans need the real registry.
+          TARGETS="${{ inputs.targets || 'targets/real.yaml' }}"
+          echo "targets=${TARGETS}" >> "$GITHUB_OUTPUT"
+          uv run checker collect -t "${TARGETS}" --run "${RUN_ID}" --only "${{ inputs.only }}"
 
       - name: Upload evidence
         if: always()
@@ -125,7 +146,9 @@ jobs:
           retention-days: 30
 
       - name: Evaluate rules
-        run: uv run checker evaluate --run "${{ steps.collect.outputs.run_id }}"
+        run: |
+          uv run checker evaluate -t "${{ steps.collect.outputs.targets }}" \
+            --run "${{ steps.collect.outputs.run_id }}"
 
       - name: Compare against the previous run
         continue-on-error: true
