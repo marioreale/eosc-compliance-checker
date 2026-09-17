@@ -199,6 +199,22 @@ def sla_published(ctx: CheckContext) -> list[Finding]:
 
 Import it in `checks/__init__.py`, add a test with `bundle_from_html`, done.
 
+## Seeing test results
+
+`ruff` and the full test suite run on every push and pull request. Results are on
+the repository's **Actions** tab: open the run, and the Summary page carries a
+rendered table of every test with timings, so you do not have to read the logs.
+Failures are also annotated inline on the diff of a pull request. The raw JUnit
+XML is attached to each run as the `junit-results` artifact.
+
+Locally:
+
+```bash
+uv run pytest              # everything, ~35s (needs Chromium)
+uv run pytest -m "not slow" # hermetic subset, under a second
+uv run ruff check src tests
+```
+
 ## Known limitations
 
 These are real and deliberate. Each one is a decision you may want to revisit

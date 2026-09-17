@@ -43,7 +43,7 @@ jobs:
         run: uv run ruff check src tests
 
       - name: Fast hermetic rule tests
-        run: uv run pytest -q -m "not slow"
+        run: uv run pytest -m "not slow" --junitxml=junit-fast.xml
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -55,7 +55,25 @@ jobs:
         run: uv run playwright install chromium --with-deps
 
       - name: End-to-end test against local fixtures
-        run: uv run pytest -q -m slow
+        run: uv run pytest -m slow --junitxml=junit-e2e.xml
+
+      # Results must be readable without opening the logs. This renders a table
+      # on the run's Summary page and annotates failing lines in the diff view.
+      - name: Publish test results
+        uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          report_paths: junit-*.xml
+          check_name: rule test results
+          detailed_summary: true
+          include_passed: true
+
+      - name: Upload raw test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-results
+          path: junit-*.xml
 
   scan:
     name: nightly scan

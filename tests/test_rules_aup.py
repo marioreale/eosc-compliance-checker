@@ -82,3 +82,35 @@ def test_per_service_findings_are_emitted_separately():
     assert by_id["svc-1"] == Verdict.PASS
     assert by_id["svc-2"] == Verdict.MANUAL_REVIEW  # page not collected, cannot judge
     assert by_id["svc-3"] == Verdict.WARN
+
+
+def test_access_policy_label_counts_as_an_aup():
+    """Most ERICs publish this as an "Access Policy", not an "Acceptable Use Policy".
+
+    Omitting the wording produced a false FAIL against BBMRI-ERIC on the first
+    real run, which does publish a conforming AUP.
+    """
+    html = (
+        '<html lang="en"><head><title>Node</title></head><body>'
+        '<a href="/services/access-policies/">Access Policies</a>'
+        "</body></html>"
+    )
+    findings = run(html, liveness={"https://node.example.org/services/access-policies/": 200})
+    assert findings[0].verdict == Verdict.PASS
+
+
+def test_absence_on_a_truncated_crawl_is_manual_review_not_fail():
+    """A bounded crawl cannot prove absence.
+
+    The AUP may simply live on a page the crawl budget never reached -- exactly
+    what happened on the first real BBMRI-ERIC run, whose AUP is linked from an
+    "Access Policies" page outside the 12-page budget. Claiming FAIL there is a
+    false accusation against the node operator.
+    """
+    bundle = bundle_from_html(BARE)
+    bundle.crawl_truncated = True
+    bundle.unvisited_count = 37
+    findings = evaluate(make_target(), bundle, only=["CAT-AUP-01"])
+    assert findings[0].verdict == Verdict.MANUAL_REVIEW
+    assert "truncated" in findings[0].message
+    assert findings[0].evidence[0].extra["unvisited"] == 37
