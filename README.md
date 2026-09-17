@@ -210,10 +210,13 @@ XML is attached to each run as the `junit-results` artifact.
 Locally:
 
 ```bash
-uv run pytest              # everything, ~35s (needs Chromium)
-uv run pytest -m "not slow" # hermetic subset, under a second
+uv run pytest               # everything, ~34s (needs Chromium)
+uv run pytest -m "not slow"  # 62 of 63 tests, no browser, 0.8s
 uv run ruff check src tests
 ```
+
+Full setup instructions for a fresh Debian VM, and for driving the suite through
+Perplexity, are in [docs/RUNNING_TESTS.md](docs/RUNNING_TESTS.md).
 
 ## Known limitations
 
