@@ -82,15 +82,23 @@ rules:
     severity: mandatory
     applies_to: [node_landing_page]
     pages: entry
+    # NOTE: this rule is knowingly weak and is a candidate for tier-2 promotion.
+    # On the first real run it PASSED BBMRI-ERIC by matching nav items labelled
+    # "Expert Centres" and "IT SERVICES & RESEARCH" -- a false pass. The bare
+    # word "services" appears in the navigation of essentially every research
+    # infrastructure site, so matching it asserts nothing about whether a service
+    # catalogue exists. The patterns below were narrowed to drop that word; the
+    # real fix is to resolve the link and check the response looks like a
+    # catalogue, which needs Python and belongs in tier 2.
     assert:
       scope: links
       require_live: true
       any_of:
         - '(?i)\bcatalogue\b'
         - '(?i)\bcatalog\b'
-        - '(?i)\bservices\b'
         - '(?i)\bmarketplace\b'
-        - '(?i)/services'
+        - '(?i)\bservice\s+catalogue\b'
+        - '(?i)/(service-)?catalogue?\b'
     pass_message: A reachable service catalogue link is present.
     fail_message: No reachable service catalogue link was found on the landing page.
     remediation: Link the node service catalogue from the landing page navigation.
