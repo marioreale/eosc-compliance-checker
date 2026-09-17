@@ -1,0 +1,69 @@
+[project]
+name = "compliance-checker"
+version = "0.1.0"
+description = "Evidence-collecting compliance scanner for federated node landing pages"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "playwright>=1.48",
+    "httpx>=0.27",
+    "selectolax>=0.3.21",
+    "trafilatura>=2.0",
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "typer>=0.12",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+lang = ["lingua-language-detector>=2.0"]
+a11y = ["axe-playwright-python>=0.1.4"]
+rdf = ["pyshacl>=0.26", "rdflib>=7.0"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+checker = "checker.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/checker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `tests` itself is on the path so helpers can be imported as `from conftest import ...`
+pythonpath = ["src", "tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+  "slow: needs a real browser and the local fixture server (deselect with -m 'not slow')",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# typer's whole API is function calls in argument defaults; B008 is wrong here.
+"src/checker/cli.py" = ["B008"]
+# Long literal HTML strings in fixtures and assertions stay readable unwrapped.
+"tests/*" = ["E501"]
+# The HTML template is a long literal; wrapping it would hurt readability.
+"src/checker/report.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true

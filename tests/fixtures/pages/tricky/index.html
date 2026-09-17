@@ -1,0 +1,62 @@
+<!doctype html>
+<!--
+  Adversarial fixture. Every trap here is one seen on real institutional sites.
+  A checker that passes the "good" fixture but mishandles this one is worthless.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Voorbeeld Nationale Node</title>
+</head>
+<body>
+  <!-- TRAP 1: cookie banner contains an AUP-looking link. It IS a real link so
+       a naive link check passes; the point is that it must not be mistaken for
+       the node's own policy set when only the banner has one. -->
+  <div id="cookie-banner" style="display:none">
+    <p>Wij gebruiken cookies.</p>
+    <a href="/tricky/cookies.html">Terms of use</a>
+  </div>
+
+  <header>
+    <!-- TRAP 2: login affordance is a div with role=button, not an <a> or <button>. -->
+    <div role="button" tabindex="0" data-action="oidc-start">
+      <!-- TRAP 3: its only readable label lives in an SVG aria-label. -->
+      <svg aria-label="Sign in with EOSC AAI" width="16" height="16"><use href="#key" aria-label="Sign in with EOSC AAI"/></svg>
+    </div>
+
+    <!-- TRAP 4: a decoy hidden login control that must be ignored. -->
+    <a href="/tricky/old-login.html" style="display:none">Log in (legacy)</a>
+
+    <nav>
+      <a href="/tricky/diensten.html">Diensten</a>
+      <a href="/tricky/contact.html">Contactgegevens</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- TRAP 5: lang="en" is declared on <html>, but the substantive content is
+         Dutch. A checker that trusts the lang attribute reports English. -->
+    <h1>Voorbeeld Nationale Node</h1>
+    <p>
+      Deze knooppunt maakt deel uit van de Europese onderzoeksinfrastructuur en
+      biedt rekenkracht, opslagcapaciteit en gegevensanalysediensten aan
+      onderzoekers en publieke instellingen in Nederland. Toegang tot beveiligde
+      diensten verloopt via de federatieve inlogvoorziening, zodat iedere
+      onderzoeker met een geldige instellingsidentiteit kan inloggen zonder een
+      afzonderlijk account aan te maken bij ons knooppunt.
+    </p>
+    <p>
+      Alle diensten in onze catalogus vallen onder het gebruiksbeleid van het
+      knooppunt en onder de deelnameregels van de federatie. Ondersteuning is
+      tijdens kantooruren beschikbaar via de nationale helpdesk en incidenten
+      worden behandeld volgens de gepubliceerde dienstbeschrijving.
+    </p>
+  </main>
+
+  <footer>
+    <!-- TRAP 6: privacy link points at a page that returns 404. Present but dead. -->
+    <a href="/tricky/privacybeleid-verplaatst.html">Privacy</a>
+    <a href="/tricky/aup.html">Acceptable Use Policy</a>
+  </footer>
+</body>
+</html>

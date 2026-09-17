@@ -1,0 +1,25 @@
+# Run outputs. Evidence bundles can be large and contain full page HTML; publish
+# them as CI artefacts, do not commit them.
+evidence/
+findings/
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+uv.lock.bak
+
+# Playwright
+test-results/
+playwright-report/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

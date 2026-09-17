@@ -1,0 +1,68 @@
+# The target registry.
+#
+# One entry per thing being assessed. `declarations` records what the node
+# operator has self-declared; `exemptions` records agreed, time-boxed carve-outs.
+# Both are audit-relevant: a NOT_APPLICABLE verdict must always be traceable to
+# a line in this file.
+
+schema_version: 1
+
+targets:
+  # --- local fixture target, used by the end-to-end smoke test ------------
+  - id: fixture-good
+    name: Fixture node (compliant)
+    type: node_landing_page
+    landing_page: http://127.0.0.1:8009/good/index.html
+    contact: fixtures@example.org
+    crawl:
+      max_depth: 1
+      max_pages: 6
+      respect_robots: false
+      check_link_liveness: true
+
+  - id: fixture-tricky
+    name: Fixture node (adversarial markup)
+    type: node_landing_page
+    landing_page: http://127.0.0.1:8009/tricky/index.html
+    crawl:
+      max_depth: 1
+      max_pages: 6
+      respect_robots: false
+      check_link_liveness: true
+
+  - id: fixture-anonymous
+    name: Fixture node (deliberately anonymous)
+    type: node_landing_page
+    landing_page: http://127.0.0.1:8009/anonymous/index.html
+    crawl:
+      max_depth: 0
+      max_pages: 2
+      respect_robots: false
+      check_link_liveness: false
+    declarations:
+      # Agreed at the 17 Sep meeting: a landing page that is deliberately
+      # anonymous is not required to show a login affordance.
+      no_authenticated_area: true
+
+  - id: fixture-exempted
+    name: Fixture node (time-boxed exemption)
+    type: node_landing_page
+    landing_page: http://127.0.0.1:8009/bare/index.html
+    crawl:
+      max_depth: 0
+      max_pages: 1
+      respect_robots: false
+      check_link_liveness: false
+    exemptions:
+      - rule_id: LP-CONTACT-01
+        reason: Contact route published on the parent institutional portal; migration planned.
+        expires: 2026-12-31
+        granted_by: EOSC Association onboarding team
+
+  # --- real targets: add below, keep disabled until you have permission ---
+  # - id: node-example
+  #   name: Example National Node
+  #   landing_page: https://eosc.example.org/
+  #   catalogue_api: https://eosc.example.org/api/v1/services
+  #   contact: ops@example.org
+  #   enabled: false

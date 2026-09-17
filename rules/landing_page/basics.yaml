@@ -1,0 +1,96 @@
+# Tier-1 declarative rules.
+#
+# These are the governance artefact: a policy owner should be able to read and
+# amend this file without touching Python. Each rule maps to a numbered
+# requirement so a finding can always be traced back to the checklist.
+#
+# Predicate scopes: controls | links | text | lang_attr | headers
+# When a rule needs branching or degradation, promote it to a Python check in
+# src/checker/checks/ instead of extending this format.
+
+schema_version: 1
+
+rules:
+  - id: LP-CONTACT-01
+    version: 1.0.0
+    title: Landing page provides a contact or support route
+    requirement_ref: Landing Page Requirements 4.1
+    severity: mandatory
+    applies_to: [node_landing_page]
+    description: >
+      Federation users and the onboarding team must be able to reach the node
+      operator without going through a third party.
+    pages: entry
+    assert:
+      scope: links
+      require_live: false
+      any_of:
+        - '(?i)\bcontact\b'
+        - '(?i)\bsupport\b'
+        - '(?i)\bhelpdesk\b'
+        - '(?i)\bservice\s?desk\b'
+        - '(?i)mailto:'
+    pass_message: A contact or support route is linked from the landing page.
+    fail_message: No contact, support or helpdesk route was found on the landing page.
+    remediation: >
+      Add a visible contact link, a helpdesk URL, or a mailto: address in the
+      landing page footer.
+
+  - id: LP-PRIVACY-01
+    version: 1.0.0
+    title: Privacy policy linked and reachable
+    requirement_ref: Landing Page Requirements 4.2
+    severity: mandatory
+    mandatory_from: 2026-10-08
+    applies_to: [node_landing_page]
+    pages: entry
+    assert:
+      scope: links
+      require_live: true # a dead privacy link is not a privacy policy
+      any_of:
+        - '(?i)\bprivacy\b'
+        - '(?i)\bdata\s+protection\b'
+        - '(?i)\bGDPR\b'
+        - '(?i)/privacy'
+    pass_message: A reachable privacy policy is linked from the landing page.
+    fail_message: No reachable privacy policy link was found on the landing page.
+    remediation: Publish a privacy notice and link it from the landing page footer.
+
+  - id: LP-EOSC-BRAND-01
+    version: 1.0.0
+    title: Page identifies itself as part of the EOSC Federation
+    requirement_ref: Landing Page Requirements 1.2
+    severity: recommended
+    applies_to: [node_landing_page]
+    pages: entry
+    assert:
+      scope: text
+      any_of:
+        - '(?i)\bEOSC\s+Federation\b'
+        - '(?i)\bEuropean\s+Open\s+Science\s+Cloud\b'
+        - '(?i)\bEOSC\s+Node\b'
+    pass_message: The landing page identifies the node as part of the EOSC Federation.
+    fail_message: No EOSC Federation identification found in the main page content.
+    remediation: >
+      State the node's membership of the EOSC Federation in the landing page
+      content, not only in an image or logo.
+
+  - id: LP-CATALOGUE-01
+    version: 1.0.0
+    title: Service catalogue reachable from the landing page
+    requirement_ref: Landing Page Requirements 3.4
+    severity: mandatory
+    applies_to: [node_landing_page]
+    pages: entry
+    assert:
+      scope: links
+      require_live: true
+      any_of:
+        - '(?i)\bcatalogue\b'
+        - '(?i)\bcatalog\b'
+        - '(?i)\bservices\b'
+        - '(?i)\bmarketplace\b'
+        - '(?i)/services'
+    pass_message: A reachable service catalogue link is present.
+    fail_message: No reachable service catalogue link was found on the landing page.
+    remediation: Link the node service catalogue from the landing page navigation.

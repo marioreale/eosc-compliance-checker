@@ -1,0 +1,140 @@
+name: compliance scan
+
+# Two jobs with deliberately different contracts:
+#
+#  * `rule-tests` runs on every push and PR. Fast, hermetic, no network, no
+#    browser beyond the local fixture server. This one is allowed to block merges.
+#  * `scan` runs nightly against real targets. It touches other institutions'
+#    infrastructure, so it must never block anyone's merge and must not be
+#    triggered casually.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *" # 02:17 UTC nightly
+  workflow_dispatch:
+    inputs:
+      only:
+        description: Comma-separated target ids (blank = all enabled)
+        required: false
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rule-tests:
+    name: rule tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --extra lang
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Fast hermetic rule tests
+        run: uv run pytest -q -m "not slow"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install Chromium
+        run: uv run playwright install chromium --with-deps
+
+      - name: End-to-end test against local fixtures
+        run: uv run pytest -q -m slow
+
+  scan:
+    name: nightly scan
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --extra lang
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install Chromium
+        run: uv run playwright install chromium --with-deps
+
+      # Collection is separated from evaluation so that a flaky remote host never
+      # loses the run. Evidence is uploaded regardless of what happens next.
+      - name: Collect evidence
+        id: collect
+        run: |
+          RUN_ID="$(date -u +%Y-%m-%d)-${GITHUB_RUN_NUMBER}"
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+          uv run checker collect --run "${RUN_ID}" --only "${{ inputs.only }}"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-${{ steps.collect.outputs.run_id }}
+          path: evidence/
+          retention-days: 30
+
+      - name: Evaluate rules
+        run: uv run checker evaluate --run "${{ steps.collect.outputs.run_id }}"
+
+      - name: Compare against the previous run
+        continue-on-error: true
+        run: |
+          PREV="$(ls -1 findings/*.json | sort | tail -2 | head -1)"
+          CURR="findings/${{ steps.collect.outputs.run_id }}.json"
+          if [ "$PREV" != "$CURR" ] && [ -f "$PREV" ]; then
+            uv run checker diff --previous "$PREV" --current "$CURR"
+          else
+            echo "No previous run to compare against."
+          fi
+
+      # Renders the report and exits non-zero ONLY on mandatory failures past
+      # their comply-by date. A slow remote web server must not turn the
+      # pipeline red, or people stop reading the pipeline.
+      - name: Render report
+        id: report
+        continue-on-error: true
+        run: uv run checker report --run "${{ steps.collect.outputs.run_id }}"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ steps.collect.outputs.run_id }}
+          path: |
+            reports/
+            findings/
+          retention-days: 90
+
+      - name: Summarise in the run page
+        if: always()
+        run: cat "reports/${{ steps.collect.outputs.run_id }}.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail the job on blocking non-compliance
+        if: steps.report.outcome == 'failure'
+        run: |
+          echo "::error::Mandatory compliance failures detected. See the report artefact."
+          exit 1
